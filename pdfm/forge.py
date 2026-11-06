@@ -283,6 +283,19 @@ def build_all() -> dict[str, bytes]:
                b" /A << /S /URI /URI (http://192.0.2.10/landing) >> >>",
         }),
         "js_launchurl.pdf": js_on_open(b"app.launchURL('http://' + 'pdfm-test.invalid/landing', true);"),
+        # M6: one fixture per bundled YARA rule (patterns only).
+        "fontmatrix_string.pdf": with_extra({
+            5: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica"
+               b" /FontMatrix [0.001 0 0 0.001 0 (0\\); app.alert\\('pdfm'\\);//)] >>",
+        }),
+        "xfa_tiff.pdf": with_extra({
+            1: catalog(b" /AcroForm << /Fields [] /XFA 6 0 R >>"),
+            6: stream(b'<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template><subform><field><value>'
+                      b'<image contentType="image/tif">SUkqAAgAAAA=</image></value></field></subform>'
+                      b"</template></xdp:xdp>"),
+        }),
+        "pe_in_stream.pdf": with_extra({6: stream(zlib.compress(fake_pe_with_stub()), b" /Filter /FlateDecode")}),
+        "swf_stream.pdf": with_extra({6: stream(b"FWS\x0a" + b"\0" * 28)}),
     }
 
 
@@ -302,6 +315,16 @@ def embed(name: bytes, data: bytes) -> bytes:
 def fake_pe_header() -> bytes:
     """Just enough of a PE header to be recognized; no sections, no code, cannot run."""
     return b"MZ" + b"\0" * 58 + (0x40).to_bytes(4, "little") + b"PE\0\0" + b"\0" * 64
+
+
+def fake_pe_with_stub() -> bytes:
+    """A PE header with the usual DOS stub message; still no sections and no code."""
+    header = bytearray(0x80)
+    header[0:2] = b"MZ"
+    header[0x3C:0x40] = (0x80).to_bytes(4, "little")
+    stub = b"This program cannot be run in DOS mode.\r\r\n$"
+    header[0x4E:0x4E + len(stub)] = stub
+    return bytes(header) + b"PE\0\0" + b"\0" * 64
 
 
 def office_zip_with_macro_part() -> bytes:

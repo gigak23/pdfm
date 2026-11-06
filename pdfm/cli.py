@@ -10,7 +10,7 @@ from pdfm import forge as forge_lib
 from pdfm import scanner, scoring
 from pdfm.context import ScanOptions
 from pdfm.parser.document import FileTooLarge, load
-from pdfm.report import json_out, terminal
+from pdfm.report import html_out, json_out, terminal
 from pdfm.report.safe import printable
 
 # Exit codes 0/1/2 mean benign/suspicious/malicious (see scoring.EXIT_CODES).
@@ -37,9 +37,11 @@ def scan(
     extract: Path | None = typer.Option(
         None, "--extract", help="Write embedded files here as <sha256>.bin (never executed)"),
     max_depth: int = typer.Option(3, help="How deep to scan PDFs embedded in PDFs"),
+    rules: Path | None = typer.Option(None, "--rules", help="Directory of extra YARA rules (*.yar, *.yara)"),
+    html: Path | None = typer.Option(None, "--html", help="Also write a self-contained HTML report here"),
 ) -> None:
     """Analyze a PDF file."""
-    options = ScanOptions(sandbox=sandbox, extract_dir=extract, max_depth=max_depth)
+    options = ScanOptions(sandbox=sandbox, extract_dir=extract, max_depth=max_depth, rules_dir=rules)
     # Checked by hand rather than with typer's exists=True, which exits with code 2
     # and would collide with the "malicious" verdict code.
     if not file.is_file():
@@ -55,6 +57,9 @@ def scan(
         typer.echo(json_out.render(result))
     else:
         terminal.render(result, max_objects=max_objects)
+    if html is not None:
+        html.write_text(html_out.render(result), encoding="utf-8")
+        typer.echo(f"HTML report written to {html}", err=True)
     raise typer.Exit(scoring.EXIT_CODES[result.verdict])
 
 
