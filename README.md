@@ -25,6 +25,7 @@ $ pdfm scan js_cve_pattern.pdf      # a harmless fixture from `pdfm forge`
 | **JavaScript** | Extracts scripts from actions, unreferenced `/JS` keys, XFA forms and raw bytes. A static deobfuscator undoes string splitting, `fromCharCode`, `unescape`, escape sequences, reversal and `eval` of literals. The sandbox runs all scripts in one isolated V8 context with recording stubs for the Acrobat API, and reports API calls and runtime-generated code. Flags known exploit APIs, heap sprays and shellcode patterns. |
 | **Embedded files** | Identified by content, not name (PE/ELF/Mach-O/LNK, macro Office documents, JAR/APK, archives with risky members). Hashed, optionally extracted as `<sha256>.bin`, and embedded PDFs are scanned recursively. |
 | **IOCs** | URLs, domains, IPs, emails, UNC paths (NTLM leak) and Launch targets from actions, object dictionaries and every script variant, including URLs built at runtime. Defanged in output. |
+| **Phishing lures** | Most malicious PDFs today carry no exploit, just a fake "View document" button or a QR code. PDFM scores link destinations offline (free hosting, shorteners, cheap TLDs, brand names on domains the brand doesn't own), recognizes lure layouts (short, image-heavy, big clickable area), "open this in your browser" pop-ups, and decodes QR codes in page images. |
 | **YARA** | Bundled rules (CVE-2024-4367 PDF.js FontMatrix, CVE-2010-0188 XFA TIFF, PE or Flash inside streams, spray filler, packers) plus your own via `--rules`. Matched against decoded streams and scripts, not just the raw bytes. |
 | **Reporting** | Explainable score and verdict (exit codes 0/1/2), Rich terminal report, stable JSON, and a self-contained HTML report with no scripts and a strict CSP. |
 
@@ -35,12 +36,12 @@ Requires Python 3.11+.
 ```sh
 git clone https://github.com/gigak23/pdfm && cd pdfm
 uv venv --python 3.11
-uv pip install -e ".[all]"      # sandbox (mini-racer) + YARA (yara-python)
-# or: pip install -e ".[all]"
+uv pip install -e ".[all]"      # sandbox (mini-racer) + YARA (yara-python) + QR decoding (OpenCV)
+# or: pip install -e ".[all]";  add ".[dev]" for the test suite
 ```
 
-The core works without the extras: the JavaScript sandbox and YARA are skipped if their packages
-aren't installed.
+The core works without the extras: the JavaScript sandbox, YARA and QR decoding are skipped if
+their packages aren't installed.
 
 ## Usage
 
@@ -73,11 +74,15 @@ content *does*: an exploit API, a Launch of `cmd.exe`, an embedded executable, o
 
 ## Results so far
 
-- **135 tests**: every detector has positive and negative cases, built from forged, harmless PDFs (`pdfm forge`).
+- **157 tests**: every detector has positive and negative cases, built from forged, harmless PDFs (`pdfm forge`).
 - **Benign real-world corpus** (397 PDFs: textbooks, lecture slides, vendor manuals, forms, government documents):
   **0 malicious verdicts**, 15 suspicious (all contain JavaScript or are malformed), 0 crashes, median 56 ms per file.
   Reproduce with `python tools/benchmark.py DIR --label benign`.
-- **Not yet measured:** detection rate on real malware. That's the next step (see Roadmap) and must run inside an isolated VM.
+- **First real-malware run** (100 recent MalwareBazaar PDFs, offline REMnux VM, before the phishing
+  analyzer): 29% flagged. The misses were mostly phishing lures (fake Booking.com and document-sharing
+  pages, QR codes) with no exploit or JavaScript, which is what motivated the phishing-lure analyzer.
+  Those 100 samples are now the development set. Detection rates will be reported on a fresh,
+  unseen batch.
 
 ## Design decisions (the tool is attack surface too)
 

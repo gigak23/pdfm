@@ -13,8 +13,9 @@ dependencies = [
 [project.optional-dependencies]
 sandbox = ["mini-racer>=0.12"]  # JavaScript emulation in an isolated V8
 yara = ["yara-python>=4.3"]
-all = ["mini-racer>=0.12", "yara-python>=4.3"]
-dev = ["pytest>=8.0", "mini-racer>=0.12", "yara-python>=4.3"]
+qr = ["opencv-python-headless>=4.8", "numpy>=1.24"]  # QR-code decoding in page images
+all = ["mini-racer>=0.12", "yara-python>=4.3", "opencv-python-headless>=4.8", "numpy>=1.24"]
+dev = ["pytest>=8.0", "mini-racer>=0.12", "yara-python>=4.3", "opencv-python-headless>=4.8", "numpy>=1.24"]
 
 [project.scripts]
 pdfm = "pdfm.cli:app"

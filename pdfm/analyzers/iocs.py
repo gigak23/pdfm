@@ -26,6 +26,7 @@ EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 # and requiring the dot keeps LaTeX line breaks ("\\nCode\...") from looking like UNC paths.
 UNC_RE = re.compile(r"\\\\(?:[A-Za-z0-9-]+\.)+[A-Za-z0-9-]+(?:@SSL)?(?:@\d+)?\\[^\s()<>\"']*")
 IP_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
+SCHEMELESS_RE = re.compile(r"(?i)^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:[/?#:]|$)")
 TRAILING_PUNCT = ".,;:!?'\""
 # Living-off-the-land binaries: Launch actions pointing here are how PDFs run commands.
 LOLBINS = re.compile(r"(?i)\b(?:cmd|powershell|pwsh|mshta|wscript|cscript|rundll32|regsvr32|bitsadmin|certutil|"
@@ -103,6 +104,9 @@ def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
                                         "URI action uses a script or data scheme", object_ref=action.ref,
                                         evidence=target[:200]))
             col.scan_text(target, source)
+            # Readers open "www.evil.com" without a scheme, so URI targets count as URLs regardless.
+            if action.type == "URI" and not URL_RE.search(target) and SCHEMELESS_RE.match(target.strip()):
+                col.add_url("http://" + target.strip(), source)
             if action.type == "Launch" and not URL_RE.search(target) and not UNC_RE.search(target):
                 col.add("path", target, source)
 

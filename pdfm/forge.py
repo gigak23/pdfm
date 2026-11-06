@@ -296,7 +296,51 @@ def build_all() -> dict[str, bytes]:
         }),
         "pe_in_stream.pdf": with_extra({6: stream(zlib.compress(fake_pe_with_stub()), b" /Filter /FlateDecode")}),
         "swf_stream.pdf": with_extra({6: stream(b"FWS\x0a" + b"\0" * 28)}),
+        # M7: phishing lures, modelled on real MalwareBazaar samples. Hosts are all .invalid.
+        "phish_brand_lure.pdf": lure_pdf(
+            b"https://account-booking.pdfm-test.invalid/?account.booking.com",
+            js=b"app.alert('Reader not compatible! Please open it in the browser.');"),
+        "phish_link_only.pdf": lure_pdf(b"https://secure-docusign.pdfm-test.invalid/view"),
+        "benign_flyer.pdf": lure_pdf(b"https://www.example.org/register"),
+        "schemeless_link.pdf": with_extra({
+            3: page(b" /Annots [6 0 R]"),
+            6: b"<< /Type /Annot /Subtype /Link /Rect [72 700 300 720]"
+               b" /A << /S /URI /URI (www.pdfm-test.invalid/login) >> >>",
+        }),
+        **({"qr_lure.pdf": lure_pdf(None, image=qr_image(b"https://login-microsoft.pdfm-test.invalid/mfa"))}
+           if qr_image(b"x") is not None else {}),
     }
+
+
+def lure_pdf(url: bytes | None, js: bytes | None = None, image: tuple[bytes, int, int] | None = None) -> bytes:
+    """One page that is mostly an image, with a big clickable "button" (and/or a QR code)."""
+    pixels, width, height = image or (b"\xc0" * 600 * 400, 600, 400)
+    objects = base_objects()
+    objects[1] = catalog(b" /OpenAction 8 0 R" if js else b"")
+    objects[3] = (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+                  b" /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >>"
+                  + (b" /Annots [7 0 R]" if url else b"") + b" >>")
+    objects[4] = stream(b"q 500 0 0 400 56 300 cm /Im1 Do Q BT /F1 12 Tf 72 280 Td (Your document is ready) Tj ET")
+    objects[6] = stream(zlib.compress(pixels), b" /Type /XObject /Subtype /Image /Width %d /Height %d"
+                        b" /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode" % (width, height))
+    if url:
+        objects[7] = (b"<< /Type /Annot /Subtype /Link /Rect [56 300 556 700] /Border [0 0 0]"
+                      b" /A << /S /URI /URI (" + url + b") >> >>")
+    if js:
+        objects[8] = b"<< /S /JavaScript /JS (" + js + b") >>"
+    return build_pdf(objects)
+
+
+def qr_image(text: bytes) -> tuple[bytes, int, int] | None:
+    """Grayscale QR code (raw 8-bit pixels, width, height), or None without the optional OpenCV."""
+    try:
+        import cv2
+    except ImportError:
+        return None
+    code = cv2.QRCodeEncoder.create().encode(text.decode())
+    code = cv2.resize(code, None, fx=8, fy=8, interpolation=cv2.INTER_NEAREST)
+    code = cv2.copyMakeBorder(code, 32, 32, 32, 32, cv2.BORDER_CONSTANT, value=255)
+    return code.tobytes(), code.shape[1], code.shape[0]
 
 
 # Assembled at runtime so antivirus doesn't quarantine this source file.

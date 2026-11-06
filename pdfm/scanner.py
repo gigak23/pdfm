@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pdfm import scoring
 from pdfm.analyzers import actions as action_analyzer
-from pdfm.analyzers import embedded, iocs, javascript, keywords, structure, yara_scan
+from pdfm.analyzers import embedded, iocs, javascript, keywords, phishing, structure, yara_scan
 from pdfm.analyzers import streams as stream_analyzer
 from pdfm.context import AnalysisContext, ScanOptions
 from pdfm.models import ActionInfo, ScanResult
@@ -22,6 +22,7 @@ ANALYZERS = [
     javascript.analyze,
     embedded.analyze,
     iocs.analyze,  # reads script texts and nested-file results
+    phishing.analyze,  # reads IOCs and sandbox calls; adds QR-code URLs
     yara_scan.analyze,  # also scans script texts
 ]
 
