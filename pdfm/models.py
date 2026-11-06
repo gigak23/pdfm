@@ -14,6 +14,12 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
+class Verdict(StrEnum):
+    BENIGN = "benign"
+    SUSPICIOUS = "suspicious"
+    MALICIOUS = "malicious"
+
+
 @dataclass
 class Finding:
     """One observation produced by the parser or an analyzer.
@@ -57,7 +63,10 @@ class StreamInfo:
     subtype: str | None = None
     objstm_first: int | None = None
     objstm_count: int | None = None
+    font_program: bool = False  # embedded font (Type 1 fonts are eexec-encrypted, so look random)
+    image_bound: int | None = None  # max plausible decoded size of an image, from /Width x /Height
     decoded_size: int = 0
+    partial: bool = False  # deliberately decoded only a sample (large images)
     complete: bool = False  # every filter in the chain was decoded
     truncated: bool = False  # decoding stopped at the output cap
     stopped_at: str | None = None  # first filter not decoded (image codec, Crypt, unknown)
@@ -70,6 +79,14 @@ class StreamInfo:
 
 
 @dataclass
+class ActionInfo:
+    trigger: str  # e.g. "OpenAction", "Page 1 /AA page open", "Link annotation on page 2"
+    type: str  # /S value: JavaScript, URI, Launch, SubmitForm, ...
+    ref: str
+    on_open: bool  # runs without user interaction when the file is opened
+
+
+@dataclass
 class ScanResult:
     path: str
     size: int
@@ -78,6 +95,10 @@ class ScanResult:
     pdf_version: str | None
     parse_mode: str  # "pikepdf" or "raw"
     revisions: int
+    verdict: Verdict = Verdict.BENIGN
+    score: int = 0
+    keywords: dict[str, int] = field(default_factory=dict)  # pdfid-style counts
+    actions: list[ActionInfo] = field(default_factory=list)
     objects: list[PdfObject] = field(default_factory=list)
     streams: list[StreamInfo] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)

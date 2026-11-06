@@ -12,7 +12,7 @@ RATIO_MIN_OUTPUT = 1024 * 1024
 
 def analyze(doc: PdfDocument) -> list[Finding]:
     findings: list[Finding] = []
-    errors, skipped = [], 0
+    errors, expanding, skipped = [], [], 0
 
     for s in doc.streams:
         info = s.info
@@ -30,14 +30,11 @@ def analyze(doc: PdfDocument) -> list[Finding]:
             ))
         elif info.error:
             errors.append(f"{info.ref}: {info.error}")
-        elif info.raw_size and info.decoded_size >= RATIO_MIN_OUTPUT \
-                and info.decoded_size / info.raw_size > RATIO_THRESHOLD:
-            findings.append(Finding(
-                "HIGH_COMPRESSION_RATIO", Severity.LOW,
-                f"Stream expands {info.decoded_size // info.raw_size}x when decoded",
-                object_ref=info.ref,
-                evidence=f"{info.raw_size:,} -> {info.decoded_size:,} bytes",
-            ))
+        elif (info.raw_size and info.decoded_size >= RATIO_MIN_OUTPUT
+              and info.decoded_size / info.raw_size > RATIO_THRESHOLD
+              # Flat-color images and object streams (plain text) legitimately compress this well.
+              and info.subtype != "Image" and info.dict_type != "ObjStm"):
+            expanding.append(f"{info.ref} ({info.raw_size:,} -> {info.decoded_size:,} bytes)")
 
         if len(chain) >= 3 or len(set(chain)) < len(chain):
             # Legitimate writers use one filter, occasionally two. Stacking hides content from
@@ -55,6 +52,12 @@ def analyze(doc: PdfDocument) -> list[Finding]:
                 object_ref=info.ref,
             ))
 
+    if expanding:
+        findings.append(Finding(
+            "HIGH_COMPRESSION_RATIO", Severity.LOW,
+            f"{len(expanding)} stream(s) expand more than {RATIO_THRESHOLD}x when decoded",
+            evidence="; ".join(expanding[:5]),
+        ))
     if errors:
         findings.append(Finding(
             "STREAM_DECODE_ERROR", Severity.LOW,

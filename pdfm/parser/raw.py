@@ -20,7 +20,9 @@ from pdfm.models import PdfObject
 
 # (?<!\d) stops "110 0 obj" from also matching as "10 0 obj".
 OBJ_HEADER_RE = re.compile(rb"(?<!\d)(\d{1,10})\s+(\d{1,5})\s+obj\b")
-STREAM_OR_END_RE = re.compile(rb"(?<!end)stream\b|endobj")
+# The stream keyword must directly follow the dictionary's closing ">>"; a bare match on
+# "stream" would also hit strings like "(Datastream)" and skip over real objects.
+STREAM_OR_END_RE = re.compile(rb">>[\x00\t\n\x0c\r ]*(stream)\b|endobj")
 NAME_ESCAPE_RE = re.compile(rb"#([0-9A-Fa-f]{2})")
 FILTER_RE = re.compile(rb"/Filter\s*(\[[^\]]*\]|/[^\s/\[\]<>()]+)")
 NAME_TOKEN_RE = re.compile(rb"/([^\s/\[\]<>(){}%]+)")
@@ -86,6 +88,7 @@ def iter_objects(data: bytes) -> Iterator[RawObject]:
             yield RawObject(int(m[1]), int(m[2]), m.start(), data[start:nxt.start()])
             pos = nxt.start()
             continue
+        head_end = kw.start(1)
         stream_start = kw.end()
         if data[stream_start:stream_start + 2] == b"\r\n":
             stream_start += 2
@@ -102,7 +105,7 @@ def iter_objects(data: bytes) -> Iterator[RawObject]:
                 stream_end -= 2
             elif data[stream_end - 1:stream_end] in (b"\n", b"\r"):
                 stream_end -= 1
-        yield RawObject(int(m[1]), int(m[2]), m.start(), data[start:kw.start()], (stream_start, stream_end))
+        yield RawObject(int(m[1]), int(m[2]), m.start(), data[start:head_end], (stream_start, stream_end))
 
 
 def object_offsets(data: bytes) -> dict[tuple[int, int], int]:

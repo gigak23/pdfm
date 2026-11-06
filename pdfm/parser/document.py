@@ -19,7 +19,8 @@ from typing import Iterator
 import pikepdf
 
 from pdfm.models import Finding, PdfObject, Severity
-from pdfm.parser import raw, streams
+from pdfm.parser import actions, raw, streams
+from pdfm.parser.actions import Action
 from pdfm.parser.raw import RawObject
 from pdfm.parser.streams import DecodedStream
 
@@ -44,6 +45,7 @@ class PdfDocument:
     eof_offsets: list[int]  # end offset of each %%EOF marker outside stream data
     objects: list[PdfObject] = field(default_factory=list)
     streams: list[DecodedStream] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)  # empty in raw mode
     pdf: pikepdf.Pdf | None = None  # None in raw mode
     findings: list[Finding] = field(default_factory=list)
 
@@ -145,6 +147,13 @@ def load_bytes(data: bytes, name: str = "<memory>") -> PdfDocument:
             doc.streams = streams.decode_all(doc)
             doc.objects = _walk(doc.pdf, offsets, _objstm_members(doc))
             _flag_unindexed(doc, offsets)
+            try:
+                doc.actions = actions.resolve(doc.pdf)
+            except (pikepdf.PdfError, RecursionError, TypeError, ValueError) as exc:
+                doc.findings.append(Finding(
+                    "ACTION_RESOLUTION_FAILED", Severity.LOW,
+                    "Could not walk the document's action triggers (malformed structure)", evidence=str(exc),
+                ))
 
     if doc.eof_count > 1:
         doc.findings.append(Finding(
@@ -210,6 +219,8 @@ def _flag_unindexed(doc: PdfDocument, offsets: dict[tuple[int, int], int]) -> No
     that qpdf does know are normal leftovers from editing, so they're skipped.
     """
     seen = {(o.num, o.gen) for o in doc.objects}
+    # qpdf reports a literal "N 0 obj null endobj" the same way as a missing object.
+    seen |= {(o.num, o.gen) for o in doc.raw_objects if o.head.strip() == b"null"}
     seen_gen = {}
     for num, gen in seen:
         seen_gen[num] = max(gen, seen_gen.get(num, -1))
@@ -226,13 +237,22 @@ def _flag_unindexed(doc: PdfDocument, offsets: dict[tuple[int, int], int]) -> No
 
 
 def _walk(pdf: pikepdf.Pdf, offsets: dict[tuple[int, int], int], packed: set[int]) -> list[PdfObject]:
-    objects = []
+    found: dict[tuple[int, int], object] = {}
     for obj in pdf.objects:
-        if obj is None:  # pikepdf returns null objects as None
+        # Nulls come back as None and indirect scalars (e.g. "6 0 obj 345 endobj") as plain
+        # Python values, neither of which carries an object number. Those are looked up below.
+        if not isinstance(obj, pikepdf.Object):
             continue
         num, gen = obj.objgen
-        if num == 0:  # direct objects or empty slots have no object number
-            continue
+        if num:  # 0 means a direct object or an empty slot
+            found[(num, gen)] = obj
+    for key in offsets.keys() - found.keys():
+        obj = pdf.get_object(key)  # None if qpdf has no such object in its xref
+        if obj is not None:
+            found[key] = obj
+
+    objects = []
+    for (num, gen), obj in found.items():
         is_stream = isinstance(obj, pikepdf.Stream)
         objects.append(PdfObject(
             num=num,
@@ -245,7 +265,9 @@ def _walk(pdf: pikepdf.Pdf, offsets: dict[tuple[int, int], int], packed: set[int
     return sorted(objects, key=lambda o: (o.num, o.gen))
 
 
-def _type_name(obj: pikepdf.Object, is_stream: bool) -> str:
+def _type_name(obj, is_stream: bool) -> str:
+    if not isinstance(obj, pikepdf.Object):
+        return {"int": "integer", "bool": "boolean", "Decimal": "real"}.get(type(obj).__name__, type(obj).__name__)
     if is_stream or isinstance(obj, pikepdf.Dictionary):
         declared = obj.get("/Type")
         if isinstance(declared, pikepdf.Name):

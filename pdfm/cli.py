@@ -7,12 +7,12 @@ from pathlib import Path
 import typer
 
 from pdfm import forge as forge_lib
-from pdfm import scanner
+from pdfm import scanner, scoring
 from pdfm.parser.document import FileTooLarge, load
 from pdfm.report import json_out, terminal
 from pdfm.report.safe import printable
 
-# Exit codes 0/1/2 are reserved for verdicts (benign/suspicious/malicious) from M3 on.
+# Exit codes 0/1/2 mean benign/suspicious/malicious (see scoring.EXIT_CODES).
 EXIT_ERROR = 3
 
 app = typer.Typer(
@@ -49,6 +49,7 @@ def scan(
         typer.echo(json_out.render(result))
     else:
         terminal.render(result, max_objects=max_objects)
+    raise typer.Exit(scoring.EXIT_CODES[result.verdict])
 
 
 @app.command()

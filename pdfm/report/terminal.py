@@ -11,8 +11,13 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from pdfm.models import ScanResult, Severity
+from pdfm.models import ScanResult, Severity, Verdict
 
+VERDICT_STYLE = {
+    Verdict.BENIGN: "bold green",
+    Verdict.SUSPICIOUS: "bold yellow",
+    Verdict.MALICIOUS: "bold white on red",
+}
 SEVERITY_STYLE = {
     Severity.INFO: "dim",
     Severity.LOW: "cyan",
@@ -38,7 +43,20 @@ def render(result: ScanResult, max_objects: int = 50, console: Console | None = 
     summary.add_row("Parser", result.parse_mode)
     summary.add_row("Revisions", str(result.revisions))
     summary.add_row("Objects", f"{len(result.objects)} ({streams} streams, {packed} in object streams)")
+    summary.add_row("Verdict", f"[{VERDICT_STYLE[result.verdict]}] {result.verdict.value.upper()} [/] "
+                               f"(score {result.score})")
     console.print(Panel(summary, title="PDFM scan", expand=False))
+
+    if result.keywords:
+        console.print("[bold]Keywords:[/] " + "  ".join(f"/{k} {v}" for k, v in result.keywords.items()))
+
+    if result.actions:
+        actions = Table(title="Actions", title_justify="left")
+        for col in ("Trigger", "Type", "Object", "On open"):
+            actions.add_column(col)
+        for a in result.actions:
+            actions.add_row(escape(a.trigger), escape(a.type), a.ref, "[red]yes[/]" if a.on_open else "")
+        console.print(actions)
 
     if result.objects:
         streams = {(s.num, s.gen): s for s in result.streams}

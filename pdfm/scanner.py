@@ -5,11 +5,19 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from pdfm import scoring
+from pdfm.analyzers import actions as action_analyzer
+from pdfm.analyzers import keywords, structure
 from pdfm.analyzers import streams as stream_analyzer
-from pdfm.models import ScanResult
+from pdfm.models import ActionInfo, ScanResult
 from pdfm.parser.document import PdfDocument, load, load_bytes
 
-ANALYZERS = [stream_analyzer.analyze]
+ANALYZERS = [
+    stream_analyzer.analyze,
+    keywords.analyze,
+    structure.analyze,
+    action_analyzer.analyze,
+]
 
 
 def scan(path: str | Path) -> ScanResult:
@@ -25,6 +33,8 @@ def _run(doc: PdfDocument) -> ScanResult:
         findings = list(doc.findings)
         for analyze in ANALYZERS:
             findings += analyze(doc)
+        points = scoring.score(findings)
+        counts, _, _ = keywords.count_keywords(doc)
         return ScanResult(
             path=doc.name,
             size=len(doc.data),
@@ -33,6 +43,10 @@ def _run(doc: PdfDocument) -> ScanResult:
             pdf_version=doc.version,
             parse_mode=doc.mode,
             revisions=doc.revisions,
+            verdict=scoring.verdict(points, findings),
+            score=points,
+            keywords=dict(sorted(counts.items())),
+            actions=[ActionInfo(a.trigger, a.type, a.ref, a.on_open) for a in doc.actions],
             objects=doc.objects,
             streams=[s.info for s in doc.streams],
             findings=findings,

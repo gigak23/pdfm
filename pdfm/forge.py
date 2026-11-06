@@ -11,6 +11,7 @@ import base64
 import binascii
 import io
 import re
+import zipfile
 import zlib
 
 import pikepdf
@@ -22,12 +23,20 @@ def stream(data: bytes, extra: bytes = b"") -> bytes:
     return b"<< /Length %d%s >>\nstream\n" % (len(data), extra) + data + b"\nendstream"
 
 
+def catalog(extra: bytes = b"") -> bytes:
+    return b"<< /Type /Catalog /Pages 2 0 R" + extra + b" >>"
+
+
+def page(extra: bytes = b"") -> bytes:
+    return (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+            b" /Resources << /Font << /F1 5 0 R >> >>" + extra + b" >>")
+
+
 def base_objects(text: bytes = b"Hello from PDFM") -> dict[int, bytes]:
     return {
-        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        1: catalog(),
         2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        3: b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
-           b" /Resources << /Font << /F1 5 0 R >> >> >>",
+        3: page(),
         4: stream(b"BT /F1 24 Tf 72 720 Td (" + text + b") Tj ET"),
         5: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     }
@@ -150,6 +159,13 @@ def with_extra(extra: dict[int, bytes]) -> bytes:
 SAMPLE_TEXT = b"PDFM test stream: nothing to see here. " * 4
 
 
+def small_zip() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("readme.txt", "harmless PDFM test archive")
+    return buf.getvalue()
+
+
 def build_all() -> dict[str, bytes]:
     clean = build_pdf(base_objects())
 
@@ -199,4 +215,30 @@ def build_all() -> dict[str, bytes]:
             7: stream(run_length_encode(SAMPLE_TEXT), b" /Filter /RunLengthDecode"),
         }),
         "bomb.pdf": with_extra({6: stream(flate_bomb(), b" /Filter /FlateDecode")}),
+        # M3: triage, actions, structure
+        "js_openaction.pdf": with_extra({
+            1: catalog(b" /OpenAction 6 0 R"),
+            6: b"<< /Type /Action /S /JavaScript /JS (app.alert('Hello from PDFM');) >>",
+        }),
+        "obfuscated_name.pdf": with_extra({
+            1: catalog(b" /OpenAction << /S /J#61vaScript /J#53 (app.alert('obfuscated names');) >>"),
+        }),
+        "launch.pdf": with_extra({
+            1: catalog(b" /OpenAction 6 0 R"),
+            6: b"<< /Type /Action /S /Launch /Win << /F (calc.exe) >> >>",
+        }),
+        # Typical benign form: field-formatting JS plus an OpenAction that only sets the view.
+        "form_js.pdf": with_extra({
+            1: catalog(b" /OpenAction [3 0 R /Fit] /AcroForm << /Fields [6 0 R] >>"),
+            3: page(b" /Annots [6 0 R]"),
+            6: b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (amount) /Rect [72 600 300 630] /P 3 0 R"
+               b" /AA << /K << /S /JavaScript /JS (AFNumber_Keystroke(2, 0, 0, 0, \"\", true);) >> >> >>",
+        }),
+        "link.pdf": with_extra({
+            3: page(b" /Annots [6 0 R]"),
+            6: b"<< /Type /Annot /Subtype /Link /Rect [72 700 300 720]"
+               b" /A << /S /URI /URI (https://example.com/login) >> >>",
+        }),
+        "trailing_zip.pdf": clean + small_zip(),
+        "gif_prefix.pdf": b"GIF89a\x01\x00\x01\x00\x00\x00\x00;\n" + clean,
     }

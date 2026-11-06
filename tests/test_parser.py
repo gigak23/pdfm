@@ -58,6 +58,18 @@ def test_truncated_file_does_not_crash(fixtures):
     doc.close()
 
 
+def test_indirect_scalar_objects_are_listed():
+    # Regression: pikepdf returns indirect integers as plain ints without an object number.
+    from pdfm.forge import base_objects, build_pdf
+    from pdfm.parser.document import load_bytes
+    objects = base_objects()
+    objects[6] = b"345"
+    doc = load_bytes(build_pdf(objects))
+    assert (6, "integer") in [(o.num, o.type) for o in doc.objects]
+    assert not [f for f in doc.findings if f.id == "UNINDEXED_OBJECTS"]
+    doc.close()
+
+
 def test_raw_scan_ignores_longer_object_numbers():
     objects = scan_objects(b"110 0 obj\n<< /Type /Page >>\nendobj\n")
     assert [(o.num, o.type) for o in objects] == [(110, "Page")]
