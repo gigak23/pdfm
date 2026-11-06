@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from pdfm.context import AnalysisContext
 from pdfm.models import Finding, Severity
 from pdfm.parser.document import PdfDocument
 from pdfm.parser.raw import NAME_TOKEN_RE, decode_name
@@ -75,7 +76,7 @@ def count_keywords(doc: PdfDocument) -> tuple[Counter, dict[str, list[str]], lis
     return counts, refs, obfuscated
 
 
-def analyze(doc: PdfDocument) -> list[Finding]:
+def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
     counts, refs, obfuscated = count_keywords(doc)
     findings = []
     for rule in RULES:

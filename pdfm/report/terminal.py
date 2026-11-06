@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from pdfm.models import ScanResult, Severity, Verdict
+from pdfm.report.safe import printable
 
 VERDICT_STYLE = {
     Verdict.BENIGN: "bold green",
@@ -57,6 +58,21 @@ def render(result: ScanResult, max_objects: int = 50, console: Console | None = 
         for a in result.actions:
             actions.add_row(escape(a.trigger), escape(a.type), a.ref, "[red]yes[/]" if a.on_open else "")
         console.print(actions)
+
+    for script in result.scripts:
+        lines = [
+            f"[bold]Trigger:[/] {escape(script.trigger)}" + ("  [red](runs on open)[/]" if script.on_open else ""),
+            f"[bold]Size:[/] {script.size:,} chars   [bold]SHA256:[/] {script.sha256[:16]}...",
+            f"[bold]Sandbox:[/] {escape(script.sandbox)}",
+        ]
+        if script.techniques:
+            lines.append(f"[bold]Obfuscation undone:[/] {escape(', '.join(script.techniques))}")
+        if script.api_calls:
+            lines.append("[bold]API calls observed:[/]")
+            lines += [f"  {escape(printable(c, limit=160))}" for c in script.api_calls[:15]]
+        lines.append("[bold]Code (deobfuscated):[/]")
+        lines.append(f"[dim]{escape(printable(script.deobfuscated, limit=1500))}[/]")
+        console.print(Panel("\n".join(lines), title=f"JavaScript {script.ref}", title_align="left", expand=False))
 
     if result.objects:
         streams = {(s.num, s.gen): s for s in result.streams}

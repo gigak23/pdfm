@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+import pikepdf
+
+from pdfm.context import AnalysisContext
 from pdfm.models import Finding, Severity
 from pdfm.parser.document import PdfDocument
 
@@ -20,10 +23,10 @@ ON_OPEN_RULES = {
 }
 
 
-def analyze(doc: PdfDocument) -> list[Finding]:
+def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
     hits: dict[str, list] = defaultdict(list)
     for action in doc.actions:
-        if action.on_open and action.type in ON_OPEN_RULES:
+        if action.on_open and action.type in ON_OPEN_RULES and not _empty_script(action):
             hits[ON_OPEN_RULES[action.type][0]].append(action)
 
     findings = []
@@ -37,3 +40,9 @@ def analyze(doc: PdfDocument) -> list[Finding]:
             evidence="; ".join(f"{a.trigger} ({a.ref})" for a in actions[:5]),
         ))
     return findings
+
+
+def _empty_script(action) -> bool:
+    """Document-level scripts with an empty /JS string are common in publisher PDFs and do nothing."""
+    js = action.obj.get("/JS")
+    return action.type == "JavaScript" and isinstance(js, pikepdf.String) and not bytes(js).strip()

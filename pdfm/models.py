@@ -87,6 +87,40 @@ class ActionInfo:
 
 
 @dataclass
+class ScriptInfo:
+    ref: str
+    trigger: str  # what runs it: "OpenAction", "form field x", "XFA", "unreferenced", ...
+    on_open: bool
+    size: int
+    sha256: str
+    techniques: list[str] = field(default_factory=list)  # obfuscation undone by the deobfuscator
+    deobfuscated: str = ""  # readable version (truncated for the report)
+    sandbox: str = "not run"  # "ok", "error: ...", "timeout", "memory limit", "unavailable", "disabled"
+    api_calls: list[str] = field(default_factory=list)  # e.g. "app.alert('hi')" observed in the sandbox
+
+
+@dataclass
+class EmbeddedFileInfo:
+    ref: str
+    name: str | None  # filename from the file specification (attacker-controlled!)
+    size: int
+    md5: str
+    sha1: str
+    sha256: str
+    kind: str  # detected from content, not from the name
+    extracted_to: str | None = None
+    nested_verdict: str | None = None  # for embedded PDFs scanned recursively
+
+
+@dataclass
+class IOC:
+    kind: str  # url, domain, ip, email, unc
+    value: str
+    defanged: str
+    source: str  # where it was found, e.g. "URI action 12 0 R" or "JavaScript (sandbox)"
+
+
+@dataclass
 class ScanResult:
     path: str
     size: int
@@ -99,6 +133,9 @@ class ScanResult:
     score: int = 0
     keywords: dict[str, int] = field(default_factory=dict)  # pdfid-style counts
     actions: list[ActionInfo] = field(default_factory=list)
+    scripts: list[ScriptInfo] = field(default_factory=list)
+    embedded: list[EmbeddedFileInfo] = field(default_factory=list)
+    iocs: list[IOC] = field(default_factory=list)
     objects: list[PdfObject] = field(default_factory=list)
     streams: list[StreamInfo] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)

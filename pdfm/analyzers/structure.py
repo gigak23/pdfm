@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from pdfm.context import AnalysisContext
 from pdfm.models import Finding, Severity
 from pdfm.parser.document import PdfDocument
 from pdfm.parser.filters import IMAGE_FILTERS
@@ -36,7 +37,7 @@ def sniff(data: bytes) -> str | None:
     return None
 
 
-def analyze(doc: PdfDocument) -> list[Finding]:
+def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
     findings = []
     data = doc.data
 

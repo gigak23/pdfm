@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pdfm.context import AnalysisContext
 from pdfm.models import Finding, Severity
 from pdfm.parser.document import PdfDocument
 from pdfm.parser.filters import IMAGE_FILTERS, normalize
@@ -10,7 +11,7 @@ RATIO_THRESHOLD = 100
 RATIO_MIN_OUTPUT = 1024 * 1024
 
 
-def analyze(doc: PdfDocument) -> list[Finding]:
+def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
     findings: list[Finding] = []
     errors, expanding, skipped = [], [], 0
 

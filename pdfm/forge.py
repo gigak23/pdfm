@@ -18,6 +18,11 @@ import pikepdf
 
 HEADER = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n"
 
+# Fixtures that antivirus engines quarantine on disk (Windows Defender flags the heap-spray
+# pattern as Exploit:JS/Mult.DJ even though there is no exploit). Tests scan these from memory,
+# and `pdfm forge` only writes them when asked.
+AV_SENSITIVE = {"js_spray_pattern.pdf"}
+
 
 def stream(data: bytes, extra: bytes = b"") -> bytes:
     return b"<< /Length %d%s >>\nstream\n" % (len(data), extra) + data + b"\nendstream"
@@ -187,11 +192,6 @@ def build_all() -> dict[str, bytes]:
     no_trailer = bytearray(HEADER)
     _write_objects(no_trailer, base_objects())
 
-    # No xref and no Catalog: qpdf cannot rebuild a trailer at all, which forces the raw fallback.
-    no_catalog_objects = base_objects()
-    del no_catalog_objects[1]
-    no_catalog = bytearray(HEADER)
-    _write_objects(no_catalog, no_catalog_objects)
 
     return {
         "clean.pdf": clean,
@@ -201,7 +201,7 @@ def build_all() -> dict[str, bytes]:
         "encrypted_aes128.pdf": encrypt(R=4, aes=True),
         "encrypted_rc4.pdf": encrypt(R=4, aes=False, metadata=False),
         "no_trailer.pdf": bytes(no_trailer),
-        "no_catalog.pdf": bytes(no_catalog),
+        "no_catalog.pdf": no_catalog_with({}),
         "truncated.pdf": clean[: len(clean) // 2],
         # M2: stream encodings
         "chained.pdf": with_extra({6: stream(
@@ -241,4 +241,45 @@ def build_all() -> dict[str, bytes]:
         }),
         "trailing_zip.pdf": clean + small_zip(),
         "gif_prefix.pdf": b"GIF89a\x01\x00\x01\x00\x00\x00\x00;\n" + clean,
+        # M4: JavaScript. Every script only calls app.alert; the "exploit" fixtures contain the
+        # API names and filler patterns detectors look for, never a working exploit or shellcode.
+        "js_obfuscated.pdf": js_on_open(
+            b"var p1 = 'ap' + 'p.al'; var c = String.fromCharCode(101,114,116,40,39,104,105,39,41,59);"
+            b" eval(p1 + c);"),
+        "js_cve_pattern.pdf": js_on_open(
+            b"if (app.viewerVersion < 9.1) { Collab.getIcon('pdfm-test-icon'); }"),
+        "js_spray_pattern.pdf": js_on_open(
+            b"var sled = unescape('" + b"%u9090" * 24 + b"');"
+            b" while (sled.length < 0x10000) sled += sled; app.alert('done');"),
+        "js_doclevel_split.pdf": with_extra({
+            1: catalog(b" /OpenAction 7 0 R /Names << /JavaScript << /Names [(init) 6 0 R] >> >>"),
+            6: b"<< /S /JavaScript /JS (function pdfmGreet() { app.alert('split across scripts'); }) >>",
+            7: b"<< /S /JavaScript /JS (pdfmGreet();) >>",
+        }),
+        "js_unreferenced.pdf": with_extra({6: b"<< /S /JavaScript /JS (app.alert('orphan');) >>"}),
+        "xfa_script.pdf": with_extra({
+            1: catalog(b" /AcroForm << /Fields [] /XFA 6 0 R >>"),
+            6: stream(b'<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template><subform>'
+                      b'<event activity="initialize"><script contentType="application/x-javascript">'
+                      b'app.alert(&quot;xfa&quot;);</script></event></subform></template></xdp:xdp>'),
+        }),
+        "js_raw_mode.pdf": no_catalog_with({6: b"<< /S /JavaScript /J#53 (app.alert\\('raw'\\);) >>"}),
     }
+
+
+def js_on_open(code: bytes) -> bytes:
+    return with_extra({
+        1: catalog(b" /OpenAction 6 0 R"),
+        6: b"<< /Type /Action /S /JavaScript /JS 7 0 R >>",
+        7: stream(code),
+    })
+
+
+def no_catalog_with(extra: dict[int, bytes]) -> bytes:
+    """Objects with no xref and no catalog: forces PDFM's raw-mode fallback."""
+    objects = base_objects()
+    del objects[1]
+    objects.update(extra)
+    out = bytearray(HEADER)
+    _write_objects(out, objects)
+    return bytes(out)
