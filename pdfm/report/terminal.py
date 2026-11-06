@@ -59,6 +59,25 @@ def render(result: ScanResult, max_objects: int = 50, console: Console | None = 
             actions.add_row(escape(a.trigger), escape(a.type), a.ref, "[red]yes[/]" if a.on_open else "")
         console.print(actions)
 
+    if result.embedded:
+        files = Table(title="Embedded files", title_justify="left")
+        for col in ("Object", "Name", "Detected type", "Size", "SHA256", "Nested verdict"):
+            files.add_column(col)
+        for e in result.embedded:
+            files.add_row(e.ref, escape(printable(e.name or "", limit=60)), escape(e.kind), f"{e.size:,}",
+                          e.sha256[:16] + "...", e.nested_verdict or "")
+        console.print(files)
+
+    if result.iocs:
+        iocs = Table(title="Indicators (defanged)", title_justify="left")
+        for col in ("Type", "Value", "Source"):
+            iocs.add_column(col)
+        for i in result.iocs[:50]:
+            iocs.add_row(i.kind, escape(printable(i.defanged, limit=120)), escape(i.source))
+        console.print(iocs)
+        if len(result.iocs) > 50:
+            console.print(f"[dim]... {len(result.iocs) - 50} more (see --json)[/]")
+
     for script in result.scripts:
         lines = [
             f"[bold]Trigger:[/] {escape(script.trigger)}" + ("  [red](runs on open)[/]" if script.on_open else ""),
@@ -74,7 +93,7 @@ def render(result: ScanResult, max_objects: int = 50, console: Console | None = 
         lines.append(f"[dim]{escape(printable(script.deobfuscated, limit=1500))}[/]")
         console.print(Panel("\n".join(lines), title=f"JavaScript {script.ref}", title_align="left", expand=False))
 
-    if result.objects:
+    if result.objects and max_objects > 0:
         streams = {(s.num, s.gen): s for s in result.streams}
         table = Table(title="Objects", title_justify="left")
         for col in ("Obj", "Gen", "Type", "Offset", "Filters", "Size", "Entropy"):

@@ -34,9 +34,12 @@ def scan(
     as_json: bool = typer.Option(False, "--json", help="Print JSON instead of the terminal report"),
     max_objects: int = typer.Option(50, help="Max objects to list in the terminal report"),
     sandbox: bool = typer.Option(True, "--sandbox/--no-sandbox", help="Emulate JavaScript in an isolated V8"),
+    extract: Path | None = typer.Option(
+        None, "--extract", help="Write embedded files here as <sha256>.bin (never executed)"),
+    max_depth: int = typer.Option(3, help="How deep to scan PDFs embedded in PDFs"),
 ) -> None:
     """Analyze a PDF file."""
-    options = ScanOptions(sandbox=sandbox)
+    options = ScanOptions(sandbox=sandbox, extract_dir=extract, max_depth=max_depth)
     # Checked by hand rather than with typer's exists=True, which exits with code 2
     # and would collide with the "malicious" verdict code.
     if not file.is_file():

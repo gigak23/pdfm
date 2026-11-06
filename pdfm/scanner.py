@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pdfm import scoring
 from pdfm.analyzers import actions as action_analyzer
-from pdfm.analyzers import javascript, keywords, structure
+from pdfm.analyzers import embedded, iocs, javascript, keywords, structure
 from pdfm.analyzers import streams as stream_analyzer
 from pdfm.context import AnalysisContext, ScanOptions
 from pdfm.models import ActionInfo, ScanResult
@@ -20,6 +20,8 @@ ANALYZERS = [
     structure.analyze,
     action_analyzer.analyze,
     javascript.analyze,
+    embedded.analyze,
+    iocs.analyze,  # last: reads script texts and nested-file results
 ]
 
 

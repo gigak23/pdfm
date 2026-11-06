@@ -21,7 +21,7 @@ HEADER = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n"
 # Fixtures that antivirus engines quarantine on disk (Windows Defender flags the heap-spray
 # pattern as Exploit:JS/Mult.DJ even though there is no exploit). Tests scan these from memory,
 # and `pdfm forge` only writes them when asked.
-AV_SENSITIVE = {"js_spray_pattern.pdf"}
+AV_SENSITIVE = {"js_spray_pattern.pdf", "embedded_eicar.pdf"}
 
 
 def stream(data: bytes, extra: bytes = b"") -> bytes:
@@ -264,7 +264,54 @@ def build_all() -> dict[str, bytes]:
                       b'app.alert(&quot;xfa&quot;);</script></event></subform></template></xdp:xdp>'),
         }),
         "js_raw_mode.pdf": no_catalog_with({6: b"<< /S /JavaScript /J#53 (app.alert\\('raw'\\);) >>"}),
+        # M5: embedded files and IOCs. Hosts use the reserved .invalid TLD and TEST-NET IPs.
+        "embedded_text.pdf": embed(b"notes.txt", b"Meeting notes: nothing to see here.\n"),
+        "embedded_exe.pdf": embed(b"invoice.pdf.exe", fake_pe_header()),
+        "embedded_docm.pdf": embed(b"report.docm", office_zip_with_macro_part()),
+        "embedded_pdf.pdf": embed(b"attachment.pdf", js_on_open(
+            b"if (app.viewerVersion < 9.1) { Collab.getIcon('pdfm-test-icon'); }")),
+        "embedded_eicar.pdf": embed(b"eicar.com", EICAR),
+        "unc_gotor.pdf": with_extra({
+            1: catalog(b" /OpenAction << /S /GoToR /F (\\\\\\\\pdfm-test.invalid\\\\share\\\\doc.pdf) /D [0 /Fit] >>"),
+        }),
+        "launch_cmd.pdf": with_extra({
+            1: catalog(b" /OpenAction << /S /Launch /Win << /F (cmd.exe) /P (/c echo pdfm-test) >> >>"),
+        }),
+        "ip_uri.pdf": with_extra({
+            3: page(b" /Annots [6 0 R]"),
+            6: b"<< /Type /Annot /Subtype /Link /Rect [72 700 300 720]"
+               b" /A << /S /URI /URI (http://192.0.2.10/landing) >> >>",
+        }),
+        "js_launchurl.pdf": js_on_open(b"app.launchURL('http://' + 'pdfm-test.invalid/landing', true);"),
     }
+
+
+# Assembled at runtime so antivirus doesn't quarantine this source file.
+EICAR = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$" + b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+
+
+def embed(name: bytes, data: bytes) -> bytes:
+    """A PDF carrying one attached file through the /EmbeddedFiles name tree."""
+    return with_extra({
+        1: catalog(b" /Names << /EmbeddedFiles << /Names [(" + name + b") 6 0 R] >> >>"),
+        6: b"<< /Type /Filespec /F (" + name + b") /UF (" + name + b") /EF << /F 7 0 R >> >>",
+        7: stream(zlib.compress(data), b" /Type /EmbeddedFile /Filter /FlateDecode"),
+    })
+
+
+def fake_pe_header() -> bytes:
+    """Just enough of a PE header to be recognized; no sections, no code, cannot run."""
+    return b"MZ" + b"\0" * 58 + (0x40).to_bytes(4, "little") + b"PE\0\0" + b"\0" * 64
+
+
+def office_zip_with_macro_part() -> bytes:
+    """A DOCX-shaped ZIP that declares a VBA project. The project part is empty: no macro code."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", "<document/>")
+        z.writestr("word/vbaProject.bin", b"")
+    return buf.getvalue()
 
 
 def js_on_open(code: bytes) -> bytes:
