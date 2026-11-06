@@ -46,6 +46,30 @@ class PdfObject:
 
 
 @dataclass
+class StreamInfo:
+    """Metadata about one decoded stream (the decoded bytes live in parser.streams)."""
+
+    num: int
+    gen: int
+    raw_size: int
+    filters: list[str] = field(default_factory=list)
+    dict_type: str | None = None
+    subtype: str | None = None
+    objstm_first: int | None = None
+    objstm_count: int | None = None
+    decoded_size: int = 0
+    complete: bool = False  # every filter in the chain was decoded
+    truncated: bool = False  # decoding stopped at the output cap
+    stopped_at: str | None = None  # first filter not decoded (image codec, Crypt, unknown)
+    error: str | None = None
+    entropy: float = 0.0
+
+    @property
+    def ref(self) -> str:
+        return f"{self.num} {self.gen} R"
+
+
+@dataclass
 class ScanResult:
     path: str
     size: int
@@ -55,6 +79,7 @@ class ScanResult:
     parse_mode: str  # "pikepdf" or "raw"
     revisions: int
     objects: list[PdfObject] = field(default_factory=list)
+    streams: list[StreamInfo] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 
     def to_dict(self) -> dict:

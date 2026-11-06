@@ -41,16 +41,21 @@ def render(result: ScanResult, max_objects: int = 50, console: Console | None = 
     console.print(Panel(summary, title="PDFM scan", expand=False))
 
     if result.objects:
+        streams = {(s.num, s.gen): s for s in result.streams}
         table = Table(title="Objects", title_justify="left")
-        for col in ("Obj", "Gen", "Type", "Stream", "ObjStm", "Offset"):
-            table.add_column(col, justify="right" if col in ("Obj", "Gen", "Offset") else "left")
+        for col in ("Obj", "Gen", "Type", "Offset", "Filters", "Size", "Entropy"):
+            table.add_column(col, justify="right" if col in ("Obj", "Gen", "Offset", "Size", "Entropy") else "left")
         for obj in result.objects[:max_objects]:
-            table.add_row(
-                str(obj.num), str(obj.gen), escape(obj.type),
-                "yes" if obj.is_stream else "",
-                "yes" if obj.in_objstm else "",
-                "" if obj.offset is None else str(obj.offset),
-            )
+            s = streams.get((obj.num, obj.gen))
+            offset = "objstm" if obj.in_objstm else ("" if obj.offset is None else str(obj.offset))
+            size = entropy = filters = ""
+            if s is not None:
+                filters = escape(" ".join(s.filters))
+                size = f"{s.raw_size:,} -> {s.decoded_size:,}"
+                if s.truncated or s.error:
+                    size = f"[red]{size}[/]"
+                entropy = f"{s.entropy:.2f}"
+            table.add_row(str(obj.num), str(obj.gen), escape(obj.type), offset, filters, size, entropy)
         console.print(table)
         hidden = len(result.objects) - max_objects
         if hidden > 0:
