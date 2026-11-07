@@ -10,7 +10,7 @@ from pdfm.analyzers import actions as action_analyzer
 from pdfm.analyzers import embedded, iocs, javascript, keywords, phishing, structure, yara_scan
 from pdfm.analyzers import streams as stream_analyzer
 from pdfm.context import AnalysisContext, ScanOptions
-from pdfm.models import ActionInfo, ScanResult
+from pdfm.models import ActionInfo, Finding, ScanResult, Severity
 from pdfm.parser.document import PdfDocument, load, load_bytes
 
 # Order matters: later analyzers read artifacts (scripts, embedded files) from earlier ones.
@@ -40,7 +40,14 @@ def _run(doc: PdfDocument, ctx: AnalysisContext) -> ScanResult:
     try:
         findings = list(doc.findings)
         for analyze in ANALYZERS:
-            findings += analyze(doc, ctx)
+            try:
+                findings += analyze(doc, ctx)
+            except Exception as exc:  # hostile input must not stop the remaining analyzers
+                findings.append(Finding(
+                    "ANALYZER_ERROR", Severity.INFO,
+                    f"The {analyze.__module__.rsplit('.', 1)[-1]} analyzer failed on this file; its results are missing",
+                    evidence=f"{type(exc).__name__}: {exc}"[:300],
+                ))
         points = scoring.score(findings)
         counts, _, _ = keywords.count_keywords(doc)
         return ScanResult(

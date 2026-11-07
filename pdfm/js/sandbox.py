@@ -30,8 +30,12 @@ PRELUDE = r"""
 var __calls = [], __evals = [], __payloads = [];
 function __str(a) {
   try {
-    var s = (typeof a === 'string') ? a : (a && a.__pdfmPath) ? a.__pdfmPath : JSON.stringify(a);
-    if (s === undefined) s = String(a);
+    var s;
+    if (typeof a === 'string') s = a;
+    else if (a === globalThis) s = 'this';  // its fallback prototype answers every property, even __pdfmPath
+    else if (typeof a === 'function' && typeof a.__pdfmPath === 'string') s = a.__pdfmPath;
+    else s = JSON.stringify(a);
+    if (typeof s !== 'string') s = Object.prototype.toString.call(a);
     return s.length > 300 ? s.slice(0, 300) + '...[' + s.length + ' chars]' : s;
   } catch (e) { return '?'; }
 }
@@ -150,7 +154,8 @@ def _collect(ctx, before: tuple[int, int, int], status: str) -> ScriptRun:
             "JSON.stringify([__calls.slice(%d), __evals.slice(%d), __payloads.slice(%d)])" % before))
     except Exception:
         return run
-    run.calls = [f"{path}({', '.join(args)})" for path, args in calls]
-    run.evals = evals
-    run.payloads = [p.encode("utf-16-le", "surrogatepass") for p in payloads]
+    # Values come from hostile code: never assume they're strings.
+    run.calls = [f"{path}({', '.join(str(a) for a in args)})" for path, args in calls]
+    run.evals = [e for e in evals if isinstance(e, str)]
+    run.payloads = [p.encode("utf-16-le", "surrogatepass") for p in payloads if isinstance(p, str)]
     return run

@@ -117,6 +117,26 @@ def test_sandbox_exposes_document_info():
 
 
 @needs_sandbox
+def test_odd_arguments_are_recorded_as_text():
+    # Regression: app.alert(this) crashed 30 scans on CIC-Evasive-PDFMal2022.
+    [run] = sandbox.run_scripts(["app.alert(this); app.alert(function () {}); app.alert(undefined, null, 1.5)"], {})
+    assert run.status == "ok"
+    assert run.calls[0] == "app.alert(this)"
+    assert all(isinstance(c, str) for c in run.calls) and len(run.calls) == 3
+
+
+def test_a_failing_analyzer_does_not_stop_the_scan(fixtures, monkeypatch):
+    from pdfm import scanner
+
+    def broken(doc, ctx):
+        raise TypeError("boom")
+    monkeypatch.setattr(scanner, "ANALYZERS", [broken] + scanner.ANALYZERS)
+    result = scan(fixtures["js_openaction.pdf"])
+    assert "ANALYZER_ERROR" in ids(result)
+    assert "AUTO_RUN_JAVASCRIPT" in ids(result)  # later analyzers still ran
+
+
+@needs_sandbox
 def test_unknown_acrobat_builtins_become_stubs():
     [run] = sandbox.run_scripts(["AFNumber_Keystroke(2, 0); var x = 1; y = x + 1; app.alert(y);"], {})
     assert run.status == "ok"
