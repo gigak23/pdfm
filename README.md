@@ -1,5 +1,8 @@
 # PDFM
 
+[![tests](https://github.com/gigak23/pdfm/actions/workflows/tests.yml/badge.svg)](https://github.com/gigak23/pdfm/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Static analysis for malicious PDF files. PDFM parses PDF internals (including deliberately broken
 files), decodes every stream safely, resolves what runs when the document opens, deobfuscates and
 emulates embedded JavaScript in an isolated V8 sandbox, inspects embedded files, extracts IOCs, runs
@@ -74,15 +77,15 @@ content *does*: an exploit API, a Launch of `cmd.exe`, an embedded executable, o
 
 ## Results so far
 
-- **157 tests**: every detector has positive and negative cases, built from forged, harmless PDFs (`pdfm forge`).
+- **171 tests**, run on Linux and Windows in CI: every detector has positive and negative cases, built from forged, harmless PDFs (`pdfm forge`).
 - **Benign real-world corpus** (397 PDFs: textbooks, lecture slides, vendor manuals, forms, government documents):
   **0 malicious verdicts**, 15 suspicious (all contain JavaScript or are malformed), 0 crashes, median 56 ms per file.
   Reproduce with `python tools/benchmark.py DIR --label benign`.
-- **First real-malware run** (100 recent MalwareBazaar PDFs, offline REMnux VM, before the phishing
-  analyzer): 29% flagged. The misses were mostly phishing lures (fake Booking.com and document-sharing
-  pages, QR codes) with no exploit or JavaScript, which is what motivated the phishing-lure analyzer.
-  Those 100 samples are now the development set. Detection rates will be reported on a fresh,
-  unseen batch.
+- **Real malware, held-out test** (394 MalwareBazaar PDFs never seen during development, analyzed in
+  an offline REMnux VM): **54% flagged**, 22% rated malicious, 0 crashes. Most of today's malicious
+  PDFs are exploit-free phishing and malware-loader lures; on the first development batch, adding the
+  phishing analyzer raised detection from 29% to 49%. Full method, datasets and caveats:
+  [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Design decisions (the tool is attack surface too)
 
