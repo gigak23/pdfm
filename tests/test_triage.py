@@ -83,6 +83,33 @@ def test_scoring_thresholds():
     assert verdict(score([critical]), [critical]) == Verdict.MALICIOUS
 
 
+def test_overlapping_findings_count_once():
+    # "JavaScript present" and "JavaScript runs on open" describe one script.
+    js = Finding("JAVASCRIPT", Severity.HIGH, "")
+    auto = Finding("AUTO_RUN_JAVASCRIPT", Severity.HIGH, "")
+    assert score([js, auto]) == 6
+
+
+@pytest.mark.parametrize("targets, kind", [
+    (["../ARTICLES/080902.pdf"], "document"),
+    (["Habitation2004-notes-1.ppt#263,8,Slide 8"], "document"),
+    (["calc.exe"], "program"),
+    (["cmd.exe", "/c echo x"], "program"),
+    (["invoice.pdf.js"], "program"),
+    (["AccessSecurity"], "unknown"),
+])
+def test_launch_target_classification(targets, kind):
+    from pdfm.analyzers.actions import launch_kind
+    assert launch_kind(targets) == kind
+
+
+def test_launch_of_a_document_stays_benign(fixtures):
+    result = scan(fixtures["launch_document.pdf"])
+    assert "LAUNCH_ACTION" in ids(result)
+    assert "LAUNCH_EXECUTABLE" not in ids(result)
+    assert result.verdict == Verdict.BENIGN
+
+
 def test_repeated_findings_count_once():
     many = [Finding("SAME", Severity.HIGH, "") for _ in range(175)]
     assert score(many) == 6

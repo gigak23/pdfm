@@ -26,11 +26,26 @@ MALICIOUS_AT = 15
 EXIT_CODES = {Verdict.BENIGN: 0, Verdict.SUSPICIOUS: 1, Verdict.MALICIOUS: 2}
 
 
+# Findings that describe the same underlying fact: only the strongest in each group scores.
+# Otherwise one benign script ("JavaScript present" + "JavaScript runs on open") or one Launch
+# action can add up to a malicious verdict on its own (seen on GovDocs1 forms).
+OVERLAPPING = [
+    {"JAVASCRIPT", "AUTO_RUN_JAVASCRIPT"},
+    {"LAUNCH_ACTION", "AUTO_LAUNCH", "LAUNCH_EXECUTABLE", "LAUNCH_SYSTEM_TOOL", "YARA_PDFM_LAUNCH_SHELL"},
+    {"EMBEDDED_FILE", "EMBEDDED_EXECUTABLE", "EMBEDDED_MACRO_DOCUMENT", "EMBEDDED_OFFICE_DOCUMENT", "EMBEDDED_HTML",
+     "EMBEDDED_SCRIPT", "EMBEDDED_RTF", "EMBEDDED_ARCHIVE", "EMBEDDED_ARCHIVE_RISKY", "EMBEDDED_DANGEROUS_NAME"},
+    {"PHISHING_LURE_LAYOUT", "PHISHING_LURE"},
+]
+GROUP_OF = {fid: i for i, group in enumerate(OVERLAPPING) for fid in group}
+
+
 def score(findings: list[Finding]) -> int:
-    # Count each finding type once, so 175 copies of one benign pattern can't add up to "malicious".
-    worst: dict[str, int] = {}
+    # Count each finding type once, so 175 copies of one benign pattern can't add up to "malicious",
+    # and each overlapping group once, at its strongest member.
+    worst: dict[object, int] = {}
     for f in findings:
-        worst[f.id] = max(worst.get(f.id, 0), WEIGHTS[f.severity])
+        key = ("group", GROUP_OF[f.id]) if f.id in GROUP_OF else f.id
+        worst[key] = max(worst.get(key, 0), WEIGHTS[f.severity])
     return sum(worst.values())
 
 

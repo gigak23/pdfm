@@ -30,7 +30,9 @@ RULES = [
          "Document defines an action to run when opened"),
     Rule("ADDITIONAL_ACTIONS", frozenset({"AA"}), Severity.LOW,
          "Actions bound to events (page open, field focus, close, print, ...)"),
-    Rule("LAUNCH_ACTION", frozenset({"Launch"}), Severity.HIGH, "Launch action can start external programs"),
+    # MEDIUM: older documents use Launch to open other documents; the actions analyzer raises it
+    # when the target is an executable, a script, or a shell.
+    Rule("LAUNCH_ACTION", frozenset({"Launch"}), Severity.MEDIUM, "Launch action can open files or start programs"),
     # LOW: invoices (ZUGFeRD XML) and portfolios embed files legitimately; the embedded-file
     # analyzer raises the severity when the payload type is dangerous.
     Rule("EMBEDDED_FILE", frozenset({"EmbeddedFile", "EmbeddedFiles"}), Severity.LOW,

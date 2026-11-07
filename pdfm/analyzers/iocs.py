@@ -92,7 +92,7 @@ def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
         if action.type not in TARGET_ACTIONS:
             continue
         source = f"{action.type} action {action.ref}"
-        targets = _action_targets(action.obj)
+        targets = action_targets(action.obj)
         launched = [t for t in targets if LOLBINS.search(t)] if action.type == "Launch" else []
         if launched:
             findings.append(Finding("LAUNCH_SYSTEM_TOOL", Severity.CRITICAL,
@@ -149,7 +149,7 @@ def _routable(ip: str) -> bool:
                 or addr.is_multicast or ip.startswith("0."))
 
 
-def _action_targets(action: pikepdf.Dictionary) -> list[str]:
+def action_targets(action: pikepdf.Dictionary) -> list[str]:
     """Strings an action points at: /URI, /F (string or file spec), /Win /F and /P, /URL."""
     out: list[str] = []
 
