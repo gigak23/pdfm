@@ -28,8 +28,8 @@ all = ["mini-racer>=0.12", "yara-python>=4.3", "opencv-python-headless>=4.8", "n
 dev = ["pytest>=8.0", "mini-racer>=0.12", "yara-python>=4.3", "opencv-python-headless>=4.8", "numpy>=1.24"]
 
 [project.urls]
-Repository = "https://github.com/gigak23/pdfm"
-Evaluation = "https://github.com/gigak23/pdfm/blob/main/docs/EVALUATION.md"
+Repository = "https://github.com/brandonkarimi/pdfm"
+Evaluation = "https://github.com/brandonkarimi/pdfm/blob/main/docs/EVALUATION.md"
 
 [project.scripts]
 pdfm = "pdfm.cli:app"

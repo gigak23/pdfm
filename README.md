@@ -1,6 +1,6 @@
 # PDFM
 
-[![tests](https://github.com/gigak23/pdfm/actions/workflows/tests.yml/badge.svg)](https://github.com/gigak23/pdfm/actions/workflows/tests.yml)
+[![tests](https://github.com/brandonkarimi/pdfm/actions/workflows/tests.yml/badge.svg)](https://github.com/brandonkarimi/pdfm/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
@@ -53,7 +53,7 @@ detection on recent MalwareBazaar samples is lower than on the CIC benchmark.
 Requires Python 3.11+.
 
 ```sh
-git clone https://github.com/gigak23/pdfm && cd pdfm
+git clone https://github.com/brandonkarimi/pdfm && cd pdfm
 pip install -e ".[all]"
 ```
 
