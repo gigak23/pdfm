@@ -31,7 +31,11 @@ Benign sets:
 | Set | Source | Role |
 |---|---|---|
 | Personal | 397 PDFs from one user's documents (textbooks, slides, vendor manuals, forms) | development / sanity check |
-| GovDocs1 | [digitalcorpora.org](https://digitalcorpora.org/corpora/file-corpora/files/) threads `000`-`009`, PDFs only | public false-positive test |
+| GovDocs1 dev | [digitalcorpora.org](https://digitalcorpora.org/corpora/file-corpora/files/) zip threads `000`-`009`, PDFs only (2,471) | development |
+| GovDocs1 test | zip threads `010`-`019`, PDFs only (2,558) | **held-out false-positive test** |
+
+GovDocs1 threads are fixed archives, so these benign sets are exactly reproducible:
+`https://digitalcorpora.s3.amazonaws.com/corpora/files/govdocs1/zipfiles/0NN.zip`.
 
 ## Results
 
@@ -39,9 +43,10 @@ Benign sets:
 |---|---|---|---|---|
 | `mb` (dev) | 100 | 29% → **49%** | 6% → 23% | before → after the phishing analyzer |
 | `mb2` (dev) | 297 | 26% → **38%** | 9% → 10% | before → after the loader-link heuristics |
-| **`mb3` (test)** | **394** | **54.3%** | **22.1%** | never seen during development |
+| **`mb3` (test)** | **394** | **54.3%** | **22.1%** | never seen during development; measured before the GovDocs1 scoring fix, re-measure pending |
 | Personal benign | 397 | 3.8% | **0%** | all 15 flagged files contain JavaScript or are malformed |
-| GovDocs1 benign | pending | | | |
+| GovDocs1 dev | 2,471 | 2.4% → 1.7% | 2 → **0** | both were legitimate; fixed by scoring overlapping findings once and judging Launch by its target |
+| **GovDocs1 test** | **2,558** | **2.2%** | **0 (0.00%)** | never seen during development |
 
 Scan speed: median 58-85 ms per file, 0 crashes across all sets.
 
