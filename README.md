@@ -82,7 +82,7 @@ content *does*: an exploit API, a Launch of `cmd.exe`, an embedded executable, o
   **0 malicious verdicts**, 15 suspicious (all contain JavaScript or are malformed), 0 crashes, median 56 ms per file.
   Reproduce with `python tools/benchmark.py DIR --label benign`.
 - **Real malware, held-out test** (394 MalwareBazaar PDFs never seen during development, analyzed in
-  an offline REMnux VM): **54% flagged**, 22% rated malicious, 0 crashes. Most of today's malicious
+  an offline REMnux VM): **54% flagged**, 18.5% rated malicious, 0 crashes. Most of today's malicious
   PDFs are exploit-free phishing and malware-loader lures; on the first development batch, adding the
   phishing analyzer raised detection from 29% to 49%. Full method, datasets and caveats:
   [docs/EVALUATION.md](docs/EVALUATION.md).

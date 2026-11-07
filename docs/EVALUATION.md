@@ -43,7 +43,7 @@ GovDocs1 threads are fixed archives, so these benign sets are exactly reproducib
 |---|---|---|---|---|
 | `mb` (dev) | 100 | 29% → **49%** | 6% → 23% | before → after the phishing analyzer |
 | `mb2` (dev) | 297 | 26% → **38%** | 9% → 10% | before → after the loader-link heuristics |
-| **`mb3` (test)** | **394** | **54.3%** | **22.1%** | never seen during development; measured before the GovDocs1 scoring fix, re-measure pending |
+| **`mb3` (test)** | **394** | **54.3%** | **18.5%** | never seen during development (22.1% malicious before the GovDocs1 scoring fix; flagged unchanged) |
 | Personal benign | 397 | 3.8% | **0%** | all 15 flagged files contain JavaScript or are malformed |
 | GovDocs1 dev | 2,471 | 2.4% → 1.7% | 2 → **0** | both were legitimate; fixed by scoring overlapping findings once and judging Launch by its target |
 | **GovDocs1 test** | **2,558** | **2.2%** | **0 (0.00%)** | never seen during development |
