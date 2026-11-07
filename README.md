@@ -81,6 +81,9 @@ content *does*: an exploit API, a Launch of `cmd.exe`, an embedded executable, o
 - **Benign real-world corpus** (397 PDFs: textbooks, lecture slides, vendor manuals, forms, government documents):
   **0 malicious verdicts**, 15 suspicious (all contain JavaScript or are malformed), 0 crashes, median 56 ms per file.
   Reproduce with `python tools/benchmark.py DIR --label benign`.
+- **CIC-Evasive-PDFMal2022** (academic benchmark, held-out): **98.5% of 21,835 malicious PDFs flagged**;
+  0.07% of 9,106 benign PDFs rated malicious (10.9% flagged for review, mostly interactive forms).
+- **GovDocs1** (public benign corpus, held-out threads 010-019): **0 of 2,558 rated malicious**, 2.2% flagged.
 - **Real malware, held-out test** (394 MalwareBazaar PDFs never seen during development, analyzed in
   an offline REMnux VM): **54% flagged**, 18.5% rated malicious, 0 crashes. Most of today's malicious
   PDFs are exploit-free phishing and malware-loader lures; on the first development batch, adding the
