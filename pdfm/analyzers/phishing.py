@@ -32,6 +32,11 @@ from pdfm.parser.document import PdfDocument
 try:
     import cv2
     import numpy as np
+
+    try:  # OpenCV logs harmless decoder warnings ("ECI is not supported") straight to stderr
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    except AttributeError:
+        pass
 except ImportError:  # optional dependency: pip install pdfm[qr]
     cv2 = None
 
@@ -51,10 +56,17 @@ MESSAGE_ONLY_CALLS = {"app.alert", "app.beep", "app.launchURL", "this.getURL"}
 
 URL_SIGNALS = {
     "brand_impersonation": ("BRAND_IMPERSONATION", Severity.HIGH, "Link uses a brand name on a domain the brand doesn't own"),
+    "fake_government": ("FAKE_GOVERNMENT_DOMAIN", Severity.HIGH, "Link dresses a non-government domain up as a .gov address"),
     "free_hosting": ("PHISHING_HOSTED_LINK", Severity.MEDIUM, "Link points to free hosting or file sharing favoured by phishing kits"),
+    "download_link": ("DOWNLOAD_LINK", Severity.MEDIUM, "Link downloads an archive, script or executable directly"),
+    "open_redirect": ("OPEN_REDIRECT_LINK", Severity.MEDIUM, "Link bounces through an ad or search redirect to hide its destination"),
+    "domain_in_path": ("DOMAIN_IN_URL_PATH", Severity.MEDIUM, "Link spells out another company's domain in its path to look legitimate"),
     "shortener": ("URL_SHORTENER", Severity.LOW, "Link hides its destination behind a URL shortener"),
     "suspicious_tld": ("SUSPICIOUS_TLD", Severity.LOW, "Link uses a top-level domain popular with throwaway phishing sites"),
 }
+# Signals strong enough that a short document carrying them is a lure even without the image layout.
+STRONG_SIGNALS = {"brand_impersonation", "fake_government", "free_hosting", "download_link", "open_redirect",
+                  "domain_in_path", "ip_host"}
 
 
 def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
@@ -73,14 +85,14 @@ def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
         ))
 
     risky: dict[str, list[str]] = {}
-    ip_link = False  # already reported as IP_URL by the IOC analyzer; only feeds the lure decision
+    seen_signals: set[str] = set()  # includes ip_host, which the IOC analyzer already reports as IP_URL
     for ioc in ctx.iocs:
         if ioc.kind != "url" or not ioc.source.startswith(ACTIONABLE_SOURCES):
             continue
         for signal, detail in urlrisk.assess(ioc.value).signals.items():
+            seen_signals.add(signal)
             if signal in URL_SIGNALS:
                 risky.setdefault(signal, []).append(f"{ioc.defanged} ({detail.replace('.', '[.]')})")
-            ip_link |= signal == "ip_host"
     # A lure has a handful of links. In a book or manual with dozens of links, one blogspot or
     # bit.ly reference is ordinary, so link signals are downgraded and can't add up to a verdict.
     external_links = sum(1 for a in doc.actions if a.type in ("URI", "SubmitForm"))
@@ -104,13 +116,23 @@ def analyze(doc: PdfDocument, ctx: AnalysisContext) -> list[Finding]:
                                 "Script opens with a pop-up nudging the reader toward an external link",
                                 evidence=message[:200]))
 
-    if (layout or message) and (risky or qr_hits or ip_link):
+    strong = bool(seen_signals & STRONG_SIGNALS) or bool(qr_hits)
+    lure_shaped = bool(layout or message)
+    short_doc = _short_document(doc, external_links)
+    if (lure_shaped and (seen_signals or qr_hits)) or (short_doc and strong):
         findings.append(Finding(
             "PHISHING_LURE", Severity.HIGH,
             "Lure-style document whose link leads somewhere a legitimate sender wouldn't use",
-            evidence=", ".join(sorted(risky)) or "QR code",
+            evidence=", ".join(sorted(seen_signals)) or "QR code",
         ))
     return findings
+
+
+def _short_document(doc: PdfDocument, external_links: int) -> bool:
+    """1-2 pages with a handful of links: the shape of most lures, even text-only ones."""
+    if doc.pdf is None:
+        return False
+    return 1 <= len(_pages(doc)) <= LURE_MAX_PAGES and 1 <= external_links <= LURE_MAX_LINKS
 
 
 def _pages(doc: PdfDocument) -> list:

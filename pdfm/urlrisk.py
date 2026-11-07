@@ -9,9 +9,10 @@ document's layout before calling anything malicious.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 # Free app/static hosting and file sharing that phishing kits favour. Benign documents rarely
 # send readers to a bare *.vercel.app or pixeldrain link; big mainstream services (Dropbox,
@@ -25,7 +26,26 @@ HOSTING_SUFFIXES = (
     "000webhostapp.com", "repl.co", "replit.app", "surge.sh", "framer.app", "framer.website", "webflow.io",
     "godaddysites.com", "square.site", "jimdosite.com", "sites.google.com", "filecloudtrial.com",
     "storageforthecloud.com", "translate.goog",
+    # anonymous / temporary file drops
+    "storjshare.io", "tempfiles.ninja", "gofile.io", "catbox.moe", "transfer.sh", "file.io", "temp.sh",
+    "bashupload.com", "filebin.net", "ufile.io", "pantheonsite.io", "fast-page.org",
 )
+# A PDF button that downloads one of these is how loader campaigns (Qakbot, IcedID, DarkGate, ...) work.
+RISKY_DOWNLOAD_EXTENSIONS = {
+    "zip", "rar", "7z", "iso", "img", "vhd", "vhdx", "js", "jse", "vbs", "vbe", "wsf", "hta", "msi", "exe",
+    "scr", "lnk", "bat", "cmd", "ps1", "jar", "apk", "dll", "cab", "xz", "gz", "tgz", "ace", "arj", "one",
+    "appx", "msix", "url", "library-ms",
+}
+EXECUTABLE_INNER = re.compile(r"\.(?:exe|scr|js|vbs|hta|msi|lnk|bat|cmd|ps1|jar)\.[a-z0-9]{1,4}$")
+# Redirectors whose parameter carries the real destination (DarkGate used doubleclick's adurl=).
+REDIRECT_HOSTS = ("doubleclick.net", "google.com", "youtube.com", "bing.com", "linkedin.com", "facebook.com")
+REDIRECT_PARAMS = {"adurl", "url", "q", "u", "redirect", "redir", "target", "dest", "destination", "next"}
+COMMON_GTLDS = {"com", "net", "org", "info", "biz", "io", "co", "gov", "edu", "app", "dev"}
+FILE_EXTENSIONS = {"pdf", "html", "htm", "php", "asp", "aspx", "jsp", "js", "css", "png", "jpg", "jpeg", "gif",
+                   "svg", "zip", "exe", "doc", "docx", "xls", "xlsx", "txt", "xml", "json", "cgi", "py", "pl",
+                   "sh", "md", "ps", "rs", "xz", "gz", "scr", "rar"}
+# Lookalike spellings: rn->m, vv->w, 0->o, 1/l->i, applied to both brand and host before comparing.
+LOOKALIKE = str.maketrans({"0": "o", "1": "i", "l": "i"})
 SHORTENERS = {
     "bit.ly", "tinyurl.com", "t.ly", "is.gd", "cutt.ly", "rebrand.ly", "surl.li", "rb.gy", "shorturl.at",
     "s.id", "ow.ly", "tiny.cc", "v.gd", "qrco.de", "short.gy", "bl.ink", "t2m.io", "urlz.fr", "goo.su",
@@ -95,15 +115,62 @@ def _brand_tokens(text: str) -> set[str]:
     return {brand for brand in BRANDS for tok in tokens if tok.startswith(brand)}
 
 
-def assess(url: str) -> UrlRisk:
-    parts = urlsplit(url if "://" in url else "http://" + url)
+def _lookalike(text: str) -> str:
+    return text.replace("rn", "m").replace("vv", "w").translate(LOOKALIKE)
+
+
+def _public_ip(host: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_global
+
+
+def assess(url: str, _depth: int = 0) -> UrlRisk:
+    parts = urlsplit(url if "://" in url or url.startswith("//") else "http://" + url)
     host = (parts.hostname or "").lower()
     risk = UrlRisk(url, host)
     if not host:
         return risk
+    registered = registered_domain(host)
+    path = parts.path.lower()
 
-    if IP_RE.match(host):
+    # Private and loopback addresses are routers and intranet docs; public raw IPs are not normal links.
+    if IP_RE.match(host) and _public_ip(host):
         risk.signals["ip_host"] = host
+
+    last = path.rstrip("/").rsplit("/", 1)[-1]
+    ext = last.rsplit(".", 1)[-1] if "." in last else ""
+    if ext in RISKY_DOWNLOAD_EXTENSIONS or EXECUTABLE_INNER.search(last):
+        risk.signals["download_link"] = last[:80]
+
+    # Government labels in the subdomain of a non-government domain: email.gov.in.example.pl
+    sub_labels = host[: -len(registered)].strip(".").split(".") if host != registered else []
+    if any(label in ("gov", "mil") for label in sub_labels):
+        risk.signals["fake_government"] = host
+
+    # Redirect wrappers: judge the hidden destination, too.
+    if any(host == h or host.endswith("." + h) for h in REDIRECT_HOSTS) and _depth == 0:
+        for key, values in parse_qs(parts.query).items():
+            target = values[0] if values else ""
+            if key.lower() in REDIRECT_PARAMS and target.startswith(("http", "//")):
+                inner = assess(target, _depth + 1)
+                risk.signals["open_redirect"] = f"{host} -> {inner.host or target[:60]}"
+                for signal, detail in inner.signals.items():
+                    risk.signals.setdefault(signal, f"{detail} (behind redirect)")
+                break
+
+    # Another site's domain spelled out in the path, to borrow its credibility:
+    # kontaktlines.com/us.kuehne-nagel.com. Full URLs (with ://) are redirects, handled above.
+    for candidate in DOMAIN_IN_TEXT_RE.findall(path):
+        labels = candidate.split(".")
+        tld = labels[-1]
+        if tld in FILE_EXTENSIONS or "://" + candidate in url.lower():
+            continue
+        if (len(labels) >= 3 or tld in COMMON_GTLDS) and registered_domain(candidate) != registered:
+            risk.signals["domain_in_path"] = f"{candidate} inside a URL on {host}"
+            break
     if any(host == s or host.endswith("." + s) for s in HOSTING_SUFFIXES):
         risk.signals["free_hosting"] = host
     if host in SHORTENERS or registered_domain(host) in SHORTENERS:
@@ -114,10 +181,19 @@ def assess(url: str) -> UrlRisk:
     # Brand named in the hostname, but the host isn't one the brand owns. The brand's exact name on
     # another TLD (facebook.net, amazon.de) is treated as owned: kits use lookalikes, not the real name.
     for brand in _brand_tokens(host):
-        if not _owned_by(host, BRANDS[brand]) and registered_domain(host).split(".")[0] != brand:
+        if not _owned_by(host, BRANDS[brand]) and registered.split(".")[0] != brand:
             risk.signals["brand_impersonation"] = f"{brand!r} in host {host}"
+    # Lookalike spellings of longer brand names anywhere in the host (loginmlcrosoftonline...).
+    # Only when the real spelling is absent, so the exact-match rule above stays in charge.
+    folded = _lookalike(host)
+    for brand, owned in BRANDS.items():
+        if (len(brand) >= 6 and brand not in host and _lookalike(brand) in folded
+                and not _owned_by(host, owned)):
+            risk.signals["brand_impersonation"] = f"lookalike of {brand!r} in host {host}"
     # A brand's own domain spelled out in the path or query of someone else's site
     # (e.g. evil.vercel.app/?account.booking.com), a common trick to look legitimate.
+    if "open_redirect" in risk.signals:
+        return risk  # the brand domain in a redirect's parameter is the destination, judged above
     rest = f"{parts.path}?{parts.query}#{parts.fragment}".lower()
     for domain in DOMAIN_IN_TEXT_RE.findall(rest):
         for brand, owned in BRANDS.items():

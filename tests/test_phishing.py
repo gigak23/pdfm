@@ -22,10 +22,23 @@ def ids(result):
     ("https://surl.li/abcde", "shortener"),
     ("https://www.maneger-accouintr-solutieonst.site/", "suspicious_tld"),
     ("http://secure-docusign.example.net/view", "brand_impersonation"),
-    ("http://203.0.113.9/login", "ip_host"),
+    ("http://1.1.1.1:800/7c9e6679-7425-40de-944b", "ip_host"),
+    # Patterns from real loader/phishing samples, rebuilt on placeholder domains:
+    ("https://kontaktlines.example/us.kuehne-nagel.com", "domain_in_path"),
+    ("https://shipping.example/IN/PO/IDR-500000000.scr.xz", "download_link"),
+    ("https://files.example/s/abc/update.zip?download=1", "download_link"),
+    ("https://adclick.g.doubleclick.net/pcs/click?x-23&&adurl=//landing.example/", "open_redirect"),
+    ("https://loginmlcrosoftonline.example.info/?a=b", "brand_impersonation"),
+    ("https://email.gov.in.armyreports.example/service/home/", "fake_government"),
+    ("https://link.storjshare.io/s/abc/support/update.zip?download=1", "free_hosting"),
 ])
 def test_risky_urls(url, signal):
     assert signal in urlrisk.assess(url).signals
+
+
+def test_redirect_destination_is_judged_too():
+    signals = urlrisk.assess("https://adclick.g.doubleclick.net/pcs/click?x&&adurl=https://evil.vercel.app/").signals
+    assert {"open_redirect", "free_hosting"} <= set(signals)
 
 
 @pytest.mark.parametrize("url", [
@@ -37,6 +50,11 @@ def test_risky_urls(url, signal):
     "https://github.com/allenai/allennlp",
     "http://m.mirror.facebook.net/kde/devel/x.pdf",  # brand's own name on another TLD
     "https://www.amazon.de/dp/B000",
+    "http://192.168.1.1/setup",  # router admin page in a manual: private IP
+    "https://docs.python.org/3/library/zipfile.html",
+    "https://pypi.org/project/zope.interface/",
+    "https://github.com/pallets/flask.git",
+    "https://example.com/downloads/annual-report.pdf",
 ])
 def test_legitimate_urls_have_no_signals(url):
     assert urlrisk.assess(url).signals == {}
@@ -66,6 +84,13 @@ def test_legitimate_flyer_with_big_button_stays_benign(fixtures):
     assert "PHISHING_LURE_LAYOUT" in ids(result)  # it is lure-shaped...
     assert "PHISHING_LURE" not in ids(result)  # ...but its link is ordinary
     assert result.verdict == Verdict.BENIGN
+
+
+def test_short_text_only_document_with_download_link(fixtures):
+    # No image layout, but one page with one link straight to an executable dressed as an archive.
+    result = scan(fixtures["download_lure.pdf"])
+    assert {"DOWNLOAD_LINK", "PHISHING_LURE"} <= ids(result)
+    assert result.verdict != Verdict.BENIGN
 
 
 def test_schemeless_link_is_extracted(fixtures):

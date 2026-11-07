@@ -302,6 +302,11 @@ def build_all() -> dict[str, bytes]:
             js=b"app.alert('Reader not compatible! Please open it in the browser.');"),
         "phish_link_only.pdf": lure_pdf(b"https://secure-docusign.pdfm-test.invalid/view"),
         "benign_flyer.pdf": lure_pdf(b"https://www.example.org/register"),
+        "download_lure.pdf": with_extra({
+            3: page(b" /Annots [6 0 R]"),
+            6: b"<< /Type /Annot /Subtype /Link /Rect [72 700 300 720]"
+               b" /A << /S /URI /URI (https://shipping.pdfm-test.invalid/IN/PO/invoice.scr.xz) >> >>",
+        }),
         "schemeless_link.pdf": with_extra({
             3: page(b" /Annots [6 0 R]"),
             6: b"<< /Type /Annot /Subtype /Link /Rect [72 700 300 720]"
