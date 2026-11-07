@@ -23,6 +23,19 @@ from pdfm.context import ScanOptions  # noqa: E402
 from pdfm.scanner import scan  # noqa: E402
 
 
+def looks_like_pdf(path: Path) -> bool:
+    """By extension, or by a %PDF header for datasets that name samples by hash with no extension."""
+    if path.suffix.lower() == ".pdf":
+        return True
+    if path.suffix:  # .zip, .json, .txt, ...: not a sample
+        return False
+    try:
+        with path.open("rb") as f:
+            return b"%PDF" in f.read(1024)
+    except OSError:
+        return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dirs", nargs="+", type=Path)
@@ -33,7 +46,7 @@ def main() -> int:
     args = parser.parse_args()
 
     paths = sorted({p for d in args.dirs for p in d.rglob("*")
-                    if p.suffix.lower() == ".pdf" and p.is_file() and not any(x in str(p) for x in args.exclude)})
+                    if p.is_file() and looks_like_pdf(p) and not any(x in str(p) for x in args.exclude)})
     options = ScanOptions(sandbox=not args.no_sandbox)
     verdicts: collections.Counter = collections.Counter()
     finding_counts: collections.Counter = collections.Counter()
